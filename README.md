@@ -1,113 +1,112 @@
-# Privacy
+# Absol Privacy Policy
 
-This describes what the accessibility review app does with your code. It covers the app's own behaviour, which you can verify against the source in this repository — every claim below names the file that implements it.
+**Last updated:** 2026-11-26 · **Version:** 1.0
 
-> **Operators must complete this before listing.** Lines marked **`[OPERATOR]`** depend on how a particular deployment is hosted and contracted, and cannot be answered from the source. They are left blank deliberately rather than filled with a plausible guess.
+Absol is a GitHub App operated by Broja Labs (broja.dev), in Toronto, Ontario, Canada that reviews pull requests for accessibility issues. This policy describes what Absol reads, what it sends outside GitHub, what it keeps, and how to stop all of it.
 
 ## In short
 
-- Your source is read from GitHub to analyse it. Only files you changed, only extensions you configure.
-- **If contextual AI analysis is on, short snippets of your source are sent to a third-party model provider** — the line a finding sits on, plus five lines either side. You can turn this off per repository.
-- The app has no database. It stores nothing about your code between webhook deliveries.
-- The durable output lives in your own repository, as check runs and pull request comments you control.
+- Absol reads your source from GitHub to analyse it: only files changed in the pull request, only the file extensions you configure.
+- **If contextual AI analysis is on (the default), short snippets of your source are sent to Anthropic's Claude API.** A snippet is the line a finding sits on plus five lines either side. You can turn this off per repository.
+- Absol has no database. It stores nothing about your code between pull request events.
+- Everything durable it produces lives in your own repository, as check runs and pull request comments you control.
 
-## What the app reads
+## What Absol reads
 
-When a pull request is opened or updated, the app asks GitHub for:
+When a pull request is opened or updated, Absol asks GitHub for:
 
-- the list of changed files, and each one's diff ([`diff-analyzer.ts`](packages/github-app/src/services/diff-analyzer.ts))
-- the full content of changed files whose extension you configured ([`file-fetcher.ts`](packages/github-app/src/services/file-fetcher.ts))
-- existing comments on the pull request, so it does not post the same finding twice ([`comment-fingerprint.ts`](packages/review/src/comment-fingerprint.ts))
-- `.a11y-agent.yml` from your default branch, if present
+- the list of changed files and each one's diff
+- the full content of each changed file whose extension you have configured for review (by default `.js`, `.jsx`, `.ts`, `.tsx`), including lines you did not change
+- its own previous comments on the pull request, so it does not post the same finding twice and can retire findings you have fixed
+- `.a11y-agent.yml` from the pull request's base branch, if present
 
-It requests `contents: read`, `pull_requests: write`, `issues: write`, `checks: write` and `metadata: read` ([`app.yml`](app.yml)). It does not read files you did not change, branches other than the pull request's, or any repository it is not installed on.
+To do this it requests the GitHub permissions `contents: read`, `pull_requests: write`, `issues: write`, `checks: write` and `metadata: read`. It does not read files you did not change, branches other than the pull request's head and base, human review comments, issues, or any repository it is not installed on. It never pushes commits.
 
-Findings are reported only for lines the pull request changed ([`pull-request.ts`](packages/github-app/src/handlers/pull-request.ts)) — pre-existing violations elsewhere in a file are not reported.
+Findings are reported only for lines the pull request changed. Pre-existing issues elsewhere in a changed file are not reported.
+
+## What Absol writes
+
+Review comments on changed lines, one summary comment per pull request (updated in place on each push), and a check run named **Absol** on each commit. Nothing else.
 
 ## What is sent to a model provider
 
-**Only when contextual analysis is enabled.** It requires two independent things to be true: the operator has configured a provider, and your repository has not opted out. Either one off means static analysis only — no source leaves the app.
+**Only when contextual analysis is enabled.** Two things must both be true: the Absol service has a model provider configured, and your repository has not opted out. If either is false, Absol runs static analysis only and no source leaves GitHub and the Absol service.
 
-When it is on, then **per finding**, the app sends:
+When it is on, for each finding Absol sends:
 
-| Sent | From |
+| Sent | Purpose |
 |---|---|
-| The single source line the finding sits on | `elementSource` |
-| The five lines either side of it | `surroundingCode` |
-| The repository-relative file path and line number | `filename`, `line` |
-| The rule's id and its message — the app's own text, not yours | `ruleId`, `message` |
-| For a proposed fix: the model's own explanation from the previous step | `explanation` |
+| The single source line the finding sits on | What the rule flagged |
+| Up to five lines either side of it | Context to judge whether the finding is a real violation |
+| The repository-relative file path and line number | So the model can refer to the location |
+| The rule's identifier and message (Absol's own text) | What is being evaluated |
+| For a proposed fix: the model's explanation from the evaluation step | Continuity between the two calls |
 
-See [`analysis-context.ts`](packages/review/src/violation-evaluator/analysis-context.ts) for the window, and [`prompts/`](packages/review/src/violation-evaluator/prompts/) for the exact text of every request.
+**It does not send** whole files, files without findings, your git history, the diff, branch or commit messages, your repository or organisation name, any contributor's name or email, or any GitHub token.
 
-**It does not send** whole files, files without findings, your git history, your diff, branch or commit messages, your repository name beyond the file path, any contributor's name or email, or any GitHub token.
+At most **25 findings per review** are sent. Beyond that, remaining findings are reported from static analysis alone.
 
-At most **25 findings per review** are sent by default ([`contextual-analyzer.ts`](packages/review/src/contextual-analyzer.ts)); beyond that, remaining findings are reported from static analysis alone.
+Snippets are sent to **Anthropic, PBC** via the Claude API, model `claude-sonnet-4-5`. Absol's Anthropic account is governed by Anthropic's commercial terms, under which API inputs and outputs are not used to train Anthropic's models. Anthropic may retain API data for a limited period for trust-and-safety purposes as described in its documentation; Absol does not have a separate zero-retention agreement. Anthropic's handling of that data is governed by:
 
-Snippets are sent to **`[OPERATOR]` — name the provider and model this deployment uses** (the app supports Anthropic and OpenAI; the operator configures one). What that provider then does with the data is governed by its own terms, not by this document:
+- https://www.anthropic.com/legal/privacy
+- https://www.anthropic.com/legal/commercial-terms
 
-- Anthropic: https://www.anthropic.com/legal/privacy and https://www.anthropic.com/legal/commercial-terms
-- OpenAI: https://openai.com/policies/privacy-policy and https://openai.com/policies/api-data-usage-policies
+### Turning contextual analysis off
 
-**`[OPERATOR]`** — state whether this deployment has a zero-retention or no-training agreement with its provider. Do not assume one: API data is typically retained by the provider for a limited period for abuse monitoring unless separately agreed.
-
-### Turning it off
-
-In `.a11y-agent.yml` at the root of your repository:
+In `.a11y-agent.yml` at the root of your repository, on the base branch:
 
 ```yaml
 llm:
   enabled: false
 ```
 
-From then on the app runs static analysis only, and no source is sent anywhere outside GitHub and this app. Every rule still runs and findings are still reported; you lose the contextual commentary and the AI-proposed suggestions. The switch is checked before any provider is constructed, so a repository that opts out has no model client in the process at all ([`pull-request.ts`](packages/github-app/src/handlers/pull-request.ts)).
+From then on Absol runs static analysis only. Every rule still runs and findings are still reported with mechanical fixes where a rule has one; you lose the contextual commentary and AI-proposed suggestions. The switch is checked before any model client is created, so a repository that opts out has no model client in the process at all.
 
 ## What is logged
 
-The app writes operational logs. By default these contain **metadata only**:
+Absol writes operational logs containing **metadata only**:
 
-- repository and pull request number, commit SHA
-- file paths, line numbers and rule ids of findings
-- for each model call: which response shape was requested, how long it took, token counts, the model's verdict and confidence, and whether a rewrite was proposed — **not the rewrite, and not the explanation** ([`logging.ts`](packages/llm/src/decorators/logging.ts))
+- repository identifier, pull request number and commit SHA
+- file paths, line numbers and rule identifiers of findings
+- for each model call: the request type, duration, token counts, the model's verdict and confidence, and whether a fix was proposed. Not the proposed fix, and not the model's explanation.
 
-**Your source code is not logged by default.** One deployment setting changes that: `A11Y_LLM_LOG_BODIES=true` logs full prompts and responses, which contain your source. It is off by default, and the code says why — on a hosted installation it would push other people's private source into the operator's log aggregation, where it is retained and searchable. The app logs a warning on every review when it is on.
+**Your source code is not logged.** The service has a diagnostic setting that would log full prompts and responses; it is off in production and is never enabled for the shared service. If it were ever enabled to investigate a problem reported by a specific installation, that installation would be told in advance, the setting would be time-limited, and the resulting log entries deleted afterwards.
 
-**`[OPERATOR]`** — confirm `A11Y_LLM_LOG_BODIES` is unset in production, and state the hosting platform's log retention period and who can read those logs.
+Logs are held on **Railway** infrastructure in **us-east1** and retained for **[30] days** per the hosting plan. They are readable only by broja labs operators. No third-party error tracker, metrics or analytics service receives any of this data.
 
 ## What is stored
 
-**Nothing.** The app has no database, no cache and no file storage. Its dependencies are a parser, two model SDKs, a schema validator, a YAML reader and the GitHub framework — there is no persistence layer to inspect, because there is none.
+**Nothing.** Absol has no database, no cache and no file storage. Findings exist in memory for the duration of one pull request event and are discarded when it finishes. A re-run re-reads your code from GitHub and analyses it from scratch.
 
-Findings exist in memory for the duration of one webhook delivery and are gone when it finishes. Nothing is carried from one review to the next: a re-run re-reads your code from GitHub and re-analyses it from scratch.
-
-The output is durable, but it is **yours, in your repository**:
-
-- the check run on the commit
-- the summary comment on the pull request
-- inline review comments on changed lines
-
-These are written through the GitHub API, stored by GitHub under your repository, and subject to GitHub's own privacy policy and your retention settings.
-
-**`[OPERATOR]`** — if this deployment adds anything stateful (an error tracker, metrics, an analytics service), disclose it here. As the source stands, there is nothing.
+The durable output is **yours, in your repository**: the check run on the commit, the summary comment, and the inline review comments. These are written through the GitHub API, stored by GitHub under your repository, and subject to GitHub's privacy policy and your own retention settings.
 
 ## Uninstalling
 
-Removing the app from a repository or organisation immediately revokes its access: GitHub stops sending webhooks and the installation token stops working. No further code is read.
+Removing Absol from a repository or organisation revokes its access immediately: GitHub stops sending events and the installation token stops working. No further code is read.
 
-**There is no stored data to delete,** because nothing was stored. That is the whole deletion story on the app's side — not a promise to delete on request, but an absence of anything to delete.
+There is no stored data to delete on Absol's side, because nothing was stored. What remains:
 
-What remains is in your repository, and is yours to remove:
+- **Comments and check runs already posted.** They stay in your repository unless you delete them. Absol cannot remove them after its access is revoked. If you want them gone, delete them before uninstalling.
+- **Snippets already sent to Anthropic**, subject to Anthropic's retention described above.
+- **Operational log entries already written**, which expire on the retention schedule above. You may request earlier deletion at the contact below.
 
-- Comments and check runs the app already posted. They stay unless you delete them; the app cannot remove them after its access is revoked. Delete them as you would any comment.
-- Snippets already sent to the model provider, which are subject to that provider's retention. **`[OPERATOR]`** — state the provider's deletion process, or that snippets are retained per the provider's policy for a stated period.
-- Operational log entries already written, subject to the retention period above.
+## Security
 
-If you want the app's comments gone before uninstalling, do it in this order: delete the comments while the app still has access, then uninstall. Reversing it leaves the comments with no way for the app to help.
+Webhook deliveries are verified with a per-App secret. API credentials are stored as encrypted environment variables on the hosting platform and are never committed to source. Model-proposed fixes are validated by Absol against the original code before they are shown, and can only be applied by a person clicking "Commit suggestion" in GitHub.
 
-## Questions, and requests about your data
+## Legal basis and your rights
 
-**`[OPERATOR]`** — supply a contact (an email or an issue tracker), the legal entity operating this deployment, its jurisdiction, and how to make a data request. Under GDPR or UK GDPR, also state the lawful basis for processing and whether a data processing agreement is available.
+Absol processes repository content on behalf of the organisation or user that installed it, in order to provide the review that installation requested. Where GDPR or UK GDPR applies, the lawful basis is performance of a contract (Art. 6(1)(b)) for the review itself and legitimate interests (Art. 6(1)(f)) for operational logging. broja labs is located in Canada and is subject to PIPEDA. A data processing agreement is **available on request**.
 
----
+Contributor names and emails are not processed; the only personal data Absol handles is incidental, such as a name appearing in a source comment within a reviewed snippet.
 
-*This document describes the app's behaviour as implemented in this repository. Where it says what the code does, you can check it — the files are named throughout. Where a fact depends on how a deployment is hosted or contracted, it is marked `[OPERATOR]` rather than guessed at.*
+## Changes
+
+Material changes to this policy will be noted in Absol's release notes and reflected in the version and date at the top of this page.
+
+## Contact
+
+**ogoelumeze@gmail.com**
+**Broja Labs, Toronto, Ontario, Canada**
+
+Questions about this policy, data requests, and deletion requests go to the address above.
